@@ -1,0 +1,328 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useOrganization } from "@/lib/context/OrganizationContext";
+import { createClient } from "@/lib/supabase/client";
+import toast from "react-hot-toast";
+import type { MemberRole } from "@/lib/types/database";
+
+interface Member {
+    id: string;
+    user_id: string;
+    role: MemberRole;
+    invited_at: string;
+    user_email: string;
+}
+
+export default function MembersPage() {
+    const { organization, userRole, user } = useOrganization();
+    const [members, setMembers] = useState<Member[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [email, setEmail] = useState("");
+    const [inviteRole, setInviteRole] = useState<MemberRole>("member");
+    const [inviting, setInviting] = useState(false);
+
+    const canManage = userRole === "admin" || userRole === "owner";
+
+    useEffect(() => {
+        loadMembers();
+    }, [organization]);
+
+    async function loadMembers() {
+        if (!organization) return;
+
+        const supabase = createClient();
+
+        // Get all organization members with their email from auth.users
+        const { data, error } = await supabase
+            .from("organization_members")
+            .select("*")
+            .eq("organization_id", organization.id)
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            toast.error("Failed to load members");
+            console.error(error);
+            return;
+        }
+
+        // Fetch user emails (note: in production, you'd want to do this server-side)
+        const membersWithEmails = await Promise.all(
+            (data || []).map(async (member) => {
+                // For now, we'll use a placeholder. In production, you'd fetch from a view or server endpoint
+                return {
+                    ...member,
+                    user_email: member.user_id === user?.id ? user.email! : `user-${member.user_id.substring(0, 8)}@email.com`,
+                };
+            })
+        );
+
+        setMembers(membersWithEmails as Member[]);
+        setLoading(false);
+    }
+
+    async function handleInvite() {
+        if (!organization || !user) return;
+
+        setInviting(true);
+
+        try {
+            const supabase = createClient();
+
+            // In a real app, you'd send an email invitation
+            // For now, we'll create a placeholder user invitation
+            toast.info("Note: In production, this would send an email invitation");
+
+            // Log the invitation
+            await supabase.from("activity_logs").insert({
+                organization_id: organization.id,
+                user_id: user.id,
+                action: "user_invited",
+                metadata: { email, role: inviteRole },
+            });
+
+            toast.success(`Invitation sent to ${email}`);
+            setShowInviteModal(false);
+            setEmail("");
+            setInviteRole("member");
+            loadMembers();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to send invitation");
+        } finally {
+            setInviting(false);
+        }
+    }
+
+    async function handleRoleChange(memberId: string, newRole: MemberRole) {
+        if (!organization || !user) return;
+
+        try {
+            const supabase = createClient();
+
+            const { error } = await supabase
+                .from("organization_members")
+                .update({ role: newRole })
+                .eq("id", memberId);
+
+            if (error) throw error;
+
+            // Log the role change
+            await supabase.from("activity_logs").insert({
+                organization_id: organization.id,
+                user_id: user.id,
+                action: "role_changed",
+                metadata: { member_id: memberId, new_role: newRole },
+            });
+
+            toast.success("Role updated successfully");
+            loadMembers();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update role");
+        }
+    }
+
+    async function handleRemoveMember(memberId: string, memberEmail: string) {
+        if (!organization || !user) return;
+        if (!confirm(`Are you sure you want to remove ${memberEmail}?`)) return;
+
+        try {
+            const supabase = createClient();
+
+            const { error } = await supabase
+                .from("organization_members")
+                .delete()
+                .eq("id", memberId);
+
+            if (error) throw error;
+
+            // Log the removal
+            await supabase.from("activity_logs").insert({
+                organization_id: organization.id,
+                user_id: user.id,
+                action: "user_removed",
+                metadata: { member_email: memberEmail },
+            });
+
+            toast.success("Member removed successfully");
+            loadMembers();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to remove member");
+        }
+    }
+
+    const getRoleBadge = (role: MemberRole) => {
+        const badges = {
+            owner: "bg-purple-100 text-purple-700 border-purple-200",
+            admin: "bg-blue-100 text-blue-700 border-blue-200",
+            member: "bg-gray-100 text-gray-700 border-gray-200",
+        };
+        return badges[role];
+    };
+
+    return (
+        <div className="p-8">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">Members</h1>
+                    <p className="text-gray-600 mt-2">Manage organization members and roles</p>
+                </div>
+                {canManage && (
+                    <button
+                        onClick={() => setShowInviteModal(true)}
+                        className="bg-blue-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-all flex items-center gap-2"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        </svg>
+                        Invite Member
+                    </button>
+                )}
+            </div>
+
+            {/* Members List */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                {loading ? (
+                    <div className="p-12 text-center">
+                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-gray-600">Loading members...</p>
+                    </div>
+                ) : members.length === 0 ? (
+                    <div className="p-12 text-center">
+                        <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">No members yet</h3>
+                        <p className="text-gray-600">Invite team members to get started</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th className="text-left px-6 py-3 text-sm font-semibold text-gray-900">Member</th>
+                                    <th className="text-left px-6 py-3 text-sm font-semibold text-gray-900">Role</th>
+                                    <th className="text-left px-6 py-3 text-sm font-semibold text-gray-900">Joined</th>
+                                    {canManage && <th className="text-right px-6 py-3 text-sm font-semibold text-gray-900">Actions</th>}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {members.map((member) => (
+                                    <tr key={member.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                                    {member.user_email[0].toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-gray-900">{member.user_email}</p>
+                                                    {member.user_id === user?.id && (
+                                                        <span className="text-xs text-gray-500">You</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {canManage && member.user_id !== user?.id ? (
+                                                <select
+                                                    value={member.role}
+                                                    onChange={(e) => handleRoleChange(member.id, e.target.value as MemberRole)}
+                                                    className={`px-3 py-1.5 text-sm font-medium rounded border ${getRoleBadge(member.role)} cursor-pointer`}
+                                                >
+                                                    <option value="member">Member</option>
+                                                    <option value="admin">Admin</option>
+                                                    {userRole === "owner" && <option value="owner">Owner</option>}
+                                                </select>
+                                            ) : (
+                                                <span className={`inline-block px-3 py-1 text-sm font-medium rounded border ${getRoleBadge(member.role)}`}>
+                                                    {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            {new Date(member.invited_at).toLocaleDateString()}
+                                        </td>
+                                        {canManage && (
+                                            <td className="px-6 py-4 text-right">
+                                                {member.user_id !== user?.id && (
+                                                    <button
+                                                        onClick={() => handleRemoveMember(member.id, member.user_email)}
+                                                        className="text-red-600 hover:text-red-700 font-medium text-sm"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* Invite Modal */}
+            {showInviteModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-2xl font-bold text-gray-900">Invite Member</h2>
+                            <button
+                                onClick={() => setShowInviteModal(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Email address</label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="colleague@example.com"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                                <select
+                                    value={inviteRole}
+                                    onChange={(e) => setInviteRole(e.target.value as MemberRole)}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="member">Member</option>
+                                    <option value="admin">Admin</option>
+                                    {userRole === "owner" && <option value="owner">Owner</option>}
+                                </select>
+                            </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    onClick={() => setShowInviteModal(false)}
+                                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleInvite}
+                                    disabled={!email || inviting}
+                                    className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {inviting ? "Sending..." : "Send Invite"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
