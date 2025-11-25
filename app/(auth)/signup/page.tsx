@@ -37,11 +37,16 @@ export default function SignupPage() {
         try {
             const supabase = createClient();
 
-            // Sign up the user
+            // Sign up the user with metadata
             console.log("Attempting to sign up user:", email);
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email,
                 password,
+                options: {
+                    data: {
+                        organization_name: organizationName.trim(),
+                    },
+                },
             });
 
             if (authError) {
@@ -52,29 +57,21 @@ export default function SignupPage() {
             if (authData.user) {
                 console.log("User created:", authData.user.id);
 
-                // Use RPC to create organization, add member, and log activity
-                console.log("Calling create_new_organization RPC...");
-                const { data: orgId, error: rpcError } = await supabase.rpc(
-                    'create_new_organization',
-                    { org_name: organizationName.trim() }
-                );
-
-                if (rpcError) {
-                    console.error("RPC Error:", rpcError);
-                    throw rpcError;
+                // Check if session is established (email confirmed or not required)
+                if (authData.session) {
+                    toast.success("Account created successfully!");
+                    router.push("/dashboard");
+                    router.refresh();
+                } else {
+                    // Email confirmation required
+                    toast.success("Account created! Please check your email to confirm.");
+                    router.push("/login");
                 }
-
-                console.log("Organization created via RPC:", orgId);
-
-                toast.success("Account created successfully!");
-                router.push("/dashboard");
-                router.refresh();
             } else {
                 throw new Error("User creation failed - no user data returned");
             }
         } catch (error: any) {
             console.error("Signup error object:", error);
-            console.error("Signup error stringified:", JSON.stringify(error, null, 2));
             toast.error(error.message || "Failed to create account");
         } finally {
             setLoading(false);
