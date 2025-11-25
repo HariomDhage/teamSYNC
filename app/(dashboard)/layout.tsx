@@ -6,8 +6,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 import { OrganizationProvider } from "@/lib/context/OrganizationContext";
+import { useState } from "react";
 
-function DashboardSidebar() {
+function DashboardSidebar({ mobile, onClose }: { mobile?: boolean; onClose?: () => void }) {
     const { organization, userRole, user } = useOrganization();
     const pathname = usePathname();
     const router = useRouter();
@@ -95,9 +96,9 @@ function DashboardSidebar() {
     };
 
     return (
-        <div className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen">
+        <div className={`${mobile ? 'fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl' : 'hidden md:flex w-64 bg-white border-r border-gray-200'} flex-col h-full`}>
             {/* Logo/Brand */}
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -111,10 +112,17 @@ function DashboardSidebar() {
                         </p>
                     </div>
                 </div>
+                {mobile && onClose && (
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 py-6 px-3">
+            <nav className="flex-1 py-6 px-3 overflow-y-auto">
                 <div className="space-y-1">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href;
@@ -122,6 +130,7 @@ function DashboardSidebar() {
                             <Link
                                 key={item.href}
                                 href={item.href}
+                                onClick={mobile ? onClose : undefined}
                                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isActive
                                     ? "bg-blue-50 text-blue-700 font-medium"
                                     : "text-gray-700 hover:bg-gray-50"
@@ -166,12 +175,12 @@ function DashboardSidebar() {
     );
 }
 
-function DashboardContent({ children }: { children: React.ReactNode }) {
+function DashboardContent({ children, onMenuClick }: { children: React.ReactNode; onMenuClick: () => void }) {
     const { loading } = useOrganization();
 
     if (loading) {
         return (
-            <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <div className="flex-1 flex items-center justify-center bg-gray-50 h-screen">
                 <div className="text-center">
                     <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-gray-600">Loading...</p>
@@ -181,8 +190,28 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <div className="flex-1 overflow-auto bg-gray-50">
-            {children}
+        <div className="flex-1 flex flex-col h-screen overflow-hidden bg-gray-50">
+            {/* Mobile Header */}
+            <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                    </div>
+                    <span className="font-bold text-gray-900">TeamSync</span>
+                </div>
+                <button onClick={onMenuClick} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 overflow-auto">
+                {children}
+            </div>
         </div>
     );
 }
@@ -192,11 +221,31 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
     return (
         <OrganizationProvider>
-            <div className="flex h-screen">
+            <div className="flex h-screen bg-gray-50">
+                {/* Desktop Sidebar */}
                 <DashboardSidebar />
-                <DashboardContent>{children}</DashboardContent>
+
+                {/* Mobile Sidebar Overlay */}
+                {sidebarOpen && (
+                    <div
+                        className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+                        onClick={() => setSidebarOpen(false)}
+                    />
+                )}
+
+                {/* Mobile Sidebar */}
+                {sidebarOpen && (
+                    <DashboardSidebar mobile onClose={() => setSidebarOpen(false)} />
+                )}
+
+                {/* Content */}
+                <DashboardContent onMenuClick={() => setSidebarOpen(true)}>
+                    {children}
+                </DashboardContent>
             </div>
         </OrganizationProvider>
     );

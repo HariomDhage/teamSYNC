@@ -46,6 +46,7 @@ export default function SignupPage() {
                     data: {
                         organization_name: organizationName.trim(),
                     },
+                    emailRedirectTo: `${window.location.origin}/auth/callback?next=/login`,
                 },
             });
 
