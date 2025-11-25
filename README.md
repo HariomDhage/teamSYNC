@@ -42,6 +42,19 @@ A minimal workspace collaboration platform where companies can organize their pe
     ```
     Open [http://localhost:3000](http://localhost:3000) (or port 3001 if 3000 is taken).
 
+5.  **Deployment to Vercel**
+    1.  **Fix Build Dependencies**:
+        Run `npm install -D autoprefixer` and push the changes to GitHub.
+    2.  **Create Project**:
+        Go to [Vercel Dashboard](https://vercel.com/new), import your GitHub repository.
+    3.  **Configure Environment Variables**:
+        Add the following variables in the Vercel Project Settings:
+        - `NEXT_PUBLIC_SUPABASE_URL`
+        - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+        - `SUPABASE_SERVICE_ROLE_KEY` (Required for Email Invites)
+    4.  **Deploy**:
+        Click **Deploy**. Vercel will build and host your application.
+
 ---
 
 ## 🏗 Architecture Decisions
