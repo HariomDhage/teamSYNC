@@ -129,7 +129,7 @@ export default function DashboardPage() {
                     {(userRole === "admin" || userRole === "owner") && (
                         <>
                             <a
-                                href="/dashboard/teams"
+                                href="/teams"
                                 className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all group"
                             >
                                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
@@ -144,7 +144,7 @@ export default function DashboardPage() {
                             </a>
 
                             <a
-                                href="/dashboard/members"
+                                href="/members"
                                 className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all group"
                             >
                                 <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-all">
@@ -161,7 +161,7 @@ export default function DashboardPage() {
                     )}
 
                     <a
-                        href="/dashboard/teams"
+                        href="/teams"
                         className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all group"
                     >
                         <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 group-hover:bg-green-600 group-hover:text-white transition-all">

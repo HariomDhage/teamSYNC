@@ -38,49 +38,43 @@ export default function SignupPage() {
             const supabase = createClient();
 
             // Sign up the user
+            console.log("Attempting to sign up user:", email);
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email,
                 password,
             });
 
-            if (authError) throw authError;
+            if (authError) {
+                console.error("Auth error:", authError);
+                throw authError;
+            }
 
             if (authData.user) {
-                // Create the organization
-                const { data: orgData, error: orgError } = await supabase
-                    .from("organizations")
-                    .insert({ name: organizationName.trim() })
-                    .select()
-                    .single();
+                console.log("User created:", authData.user.id);
 
-                if (orgError) throw orgError;
+                // Use RPC to create organization, add member, and log activity
+                console.log("Calling create_new_organization RPC...");
+                const { data: orgId, error: rpcError } = await supabase.rpc(
+                    'create_new_organization',
+                    { org_name: organizationName.trim() }
+                );
 
-                // Add user as owner of the organization
-                const { error: memberError } = await supabase
-                    .from("organization_members")
-                    .insert({
-                        organization_id: orgData.id,
-                        user_id: authData.user.id,
-                        role: "owner",
-                        invited_by: null,
-                    });
+                if (rpcError) {
+                    console.error("RPC Error:", rpcError);
+                    throw rpcError;
+                }
 
-                if (memberError) throw memberError;
-
-                // Log the organization creation
-                await supabase.from("activity_logs").insert({
-                    organization_id: orgData.id,
-                    user_id: authData.user.id,
-                    action: "organization_created",
-                    metadata: { organization_name: organizationName.trim() },
-                });
+                console.log("Organization created via RPC:", orgId);
 
                 toast.success("Account created successfully!");
                 router.push("/dashboard");
                 router.refresh();
+            } else {
+                throw new Error("User creation failed - no user data returned");
             }
         } catch (error: any) {
-            console.error("Signup error:", error);
+            console.error("Signup error object:", error);
+            console.error("Signup error stringified:", JSON.stringify(error, null, 2));
             toast.error(error.message || "Failed to create account");
         } finally {
             setLoading(false);

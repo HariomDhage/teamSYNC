@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
-    const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -18,19 +16,32 @@ export default function LoginPage() {
 
         try {
             const supabase = createClient();
+            console.log("Attempting login for:", email);
+
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
                 password,
             });
 
-            if (error) throw error;
+            if (error) {
+                console.error("Login error details:", error);
+                throw error;
+            }
 
             if (data.user) {
+                console.log("Login successful, user:", data.user.id);
+                console.log("Session:", data.session);
                 toast.success("Welcome back!");
-                router.push("/dashboard");
-                router.refresh();
+
+                // Force a hard navigation to ensure auth state is updated
+                console.log("Redirecting to /dashboard...");
+                window.location.href = "/dashboard";
+            } else {
+                throw new Error("No user returned from login");
             }
         } catch (error: any) {
+            console.error("Login error:", error);
+            console.error("Error details:", JSON.stringify(error, null, 2));
             toast.error(error.message || "Failed to sign in");
         } finally {
             setLoading(false);

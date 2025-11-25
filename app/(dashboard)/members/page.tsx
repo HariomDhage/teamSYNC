@@ -22,6 +22,9 @@ export default function MembersPage() {
     const [email, setEmail] = useState("");
     const [inviteRole, setInviteRole] = useState<MemberRole>("member");
     const [inviting, setInviting] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState("");
 
     const canManage = userRole === "admin" || userRole === "owner";
 
@@ -34,32 +37,31 @@ export default function MembersPage() {
 
         const supabase = createClient();
 
-        // Get all organization members with their email from auth.users
-        const { data, error } = await supabase
-            .from("organization_members")
-            .select("*")
-            .eq("organization_id", organization.id)
-            .order("created_at", { ascending: false });
+        try {
+            // Use the secure RPC to get members with emails
+            const { data, error } = await supabase
+                .rpc('get_organization_members_with_email', {
+                    org_id: organization.id
+                });
 
-        if (error) {
-            toast.error("Failed to load members");
-            console.error(error);
-            return;
+            if (error) throw error;
+
+            const formattedMembers = data.map((member: any) => ({
+                id: member.member_id,
+                user_id: member.member_user_id,
+                role: member.member_role,
+                invited_at: member.member_created_at,
+                user_email: member.member_email,
+            }));
+
+            setMembers(formattedMembers);
+        } catch (error: any) {
+            console.error("Error loading members:", JSON.stringify(error, null, 2));
+            console.error("Error details:", error.message, error.code, error.details);
+            toast.error(`Failed to load members: ${error.message || "Unknown error"}`);
+        } finally {
+            setLoading(false);
         }
-
-        // Fetch user emails (note: in production, you'd want to do this server-side)
-        const membersWithEmails = await Promise.all(
-            (data || []).map(async (member) => {
-                // For now, we'll use a placeholder. In production, you'd fetch from a view or server endpoint
-                return {
-                    ...member,
-                    user_email: member.user_id === user?.id ? user.email! : `user-${member.user_id.substring(0, 8)}@email.com`,
-                };
-            })
-        );
-
-        setMembers(membersWithEmails as Member[]);
-        setLoading(false);
     }
 
     async function handleInvite() {
@@ -68,19 +70,18 @@ export default function MembersPage() {
         setInviting(true);
 
         try {
-            const supabase = createClient();
+            const formData = new FormData();
+            formData.append("email", email);
+            formData.append("role", inviteRole);
+            formData.append("organizationId", organization.id);
 
-            // In a real app, you'd send an email invitation
-            // For now, we'll create a placeholder user invitation
-            toast.info("Note: In production, this would send an email invitation");
+            // Dynamically import the action to avoid client-side bundling issues if any
+            const { inviteMember } = await import("@/app/actions/invite-member");
+            const result = await inviteMember(formData);
 
-            // Log the invitation
-            await supabase.from("activity_logs").insert({
-                organization_id: organization.id,
-                user_id: user.id,
-                action: "user_invited",
-                metadata: { email, role: inviteRole },
-            });
+            if (result.error) {
+                throw new Error(result.error);
+            }
 
             toast.success(`Invitation sent to ${email}`);
             setShowInviteModal(false);
@@ -92,6 +93,76 @@ export default function MembersPage() {
         } finally {
             setInviting(false);
         }
+    }
+
+    async function handleBulkImport(e: React.ChangeEvent<HTMLInputElement>) {
+        if (!organization || !user || !e.target.files || !e.target.files[0]) return;
+
+        const file = e.target.files[0];
+        setImporting(true);
+        setImportProgress("Reading file...");
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const text = event.target?.result as string;
+                const lines = text.split(/\r\n|\n/);
+                const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+
+                const emailIndex = headers.indexOf('email');
+                const roleIndex = headers.indexOf('role');
+
+                if (emailIndex === -1) {
+                    toast.error("CSV must have an 'email' column");
+                    setImporting(false);
+                    return;
+                }
+
+                let successCount = 0;
+                let failCount = 0;
+                const supabase = createClient();
+
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+
+                    const columns = line.split(',').map(c => c.trim());
+                    const email = columns[emailIndex];
+                    // Clean role and validate
+                    let role = roleIndex !== -1 ? columns[roleIndex].toLowerCase() : 'member';
+                    if (!['owner', 'admin', 'member'].includes(role)) role = 'member';
+
+                    if (!email) continue;
+
+                    setImportProgress(`Importing ${i}/${lines.length - 1}: ${email}`);
+
+                    try {
+                        // Log the invitation
+                        await supabase.from("activity_logs").insert({
+                            organization_id: organization.id,
+                            user_id: user.id,
+                            action: "user_invited",
+                            metadata: { email, role },
+                        });
+                        successCount++;
+                    } catch (err) {
+                        console.error(`Failed to invite ${email}`, err);
+                        failCount++;
+                    }
+                }
+
+                toast.success(`Import complete: ${successCount} invited, ${failCount} failed`);
+                setShowImportModal(false);
+                loadMembers();
+            } catch (error) {
+                console.error("Import error:", error);
+                toast.error("Failed to process CSV file");
+            } finally {
+                setImporting(false);
+                setImportProgress("");
+            }
+        };
+        reader.readAsText(file);
     }
 
     async function handleRoleChange(memberId: string, newRole: MemberRole) {
@@ -169,15 +240,26 @@ export default function MembersPage() {
                     <p className="text-gray-600 mt-2">Manage organization members and roles</p>
                 </div>
                 {canManage && (
-                    <button
-                        onClick={() => setShowInviteModal(true)}
-                        className="bg-blue-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-all flex items-center gap-2"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                        </svg>
-                        Invite Member
-                    </button>
+                    <>
+                        <button
+                            onClick={() => setShowInviteModal(true)}
+                            className="bg-blue-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-all flex items-center gap-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                            </svg>
+                            Invite Member
+                        </button>
+                        <button
+                            onClick={() => setShowImportModal(true)}
+                            className="bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-all flex items-center gap-2 ml-3"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Import CSV
+                        </button>
+                    </>
                 )}
             </div>
 
@@ -287,7 +369,7 @@ export default function MembersPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="colleague@example.com"
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                                 />
                             </div>
 
@@ -296,7 +378,7 @@ export default function MembersPage() {
                                 <select
                                     value={inviteRole}
                                     onChange={(e) => setInviteRole(e.target.value as MemberRole)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                                 >
                                     <option value="member">Member</option>
                                     <option value="admin">Admin</option>
@@ -317,6 +399,63 @@ export default function MembersPage() {
                                     className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {inviting ? "Sending..." : "Send Invite"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Import Modal */}
+            {showImportModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-2xl font-bold text-gray-900">Bulk Import Members</h2>
+                            <button
+                                onClick={() => setShowImportModal(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="p-4 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                                <p className="font-semibold mb-1">CSV Format Required:</p>
+                                <p>Columns: <code>email</code>, <code>role</code> (optional)</p>
+                                <p className="mt-1 text-xs">Example: <code>john@example.com, admin</code></p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Upload CSV File</label>
+                                <input
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={handleBulkImport}
+                                    disabled={importing}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                                />
+                            </div>
+
+                            {importing && (
+                                <div className="mt-4">
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div className="bg-blue-600 h-2.5 rounded-full animate-pulse" style={{ width: '100%' }}></div>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-2 text-center">{importProgress}</p>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    onClick={() => setShowImportModal(false)}
+                                    disabled={importing}
+                                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Cancel
                                 </button>
                             </div>
                         </div>

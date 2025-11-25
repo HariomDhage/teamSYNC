@@ -30,7 +30,7 @@ function DashboardSidebar() {
             ),
         },
         {
-            href: "/dashboard/teams",
+            href: "/teams",
             label: "Teams",
             icon: (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -39,11 +39,20 @@ function DashboardSidebar() {
             ),
         },
         {
-            href: "/dashboard/members",
+            href: "/members",
             label: "Members",
             icon: (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            ),
+        },
+        {
+            href: "/settings/security",
+            label: "Security",
+            icon: (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
             ),
         },
@@ -52,7 +61,7 @@ function DashboardSidebar() {
     // Add activity if admin or owner
     if (userRole === "admin" || userRole === "owner") {
         navItems.push({
-            href: "/dashboard/activity",
+            href: "/activity",
             label: "Activity",
             icon: (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -65,7 +74,7 @@ function DashboardSidebar() {
     // Add settings if owner
     if (userRole === "owner") {
         navItems.push({
-            href: "/dashboard/settings",
+            href: "/settings",
             label: "Settings",
             icon: (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,8 +123,8 @@ function DashboardSidebar() {
                                 key={item.href}
                                 href={item.href}
                                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isActive
-                                        ? "bg-blue-50 text-blue-700 font-medium"
-                                        : "text-gray-700 hover:bg-gray-50"
+                                    ? "bg-blue-50 text-blue-700 font-medium"
+                                    : "text-gray-700 hover:bg-gray-50"
                                     }`}
                             >
                                 {item.icon}

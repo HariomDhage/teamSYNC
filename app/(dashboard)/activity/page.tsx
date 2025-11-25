@@ -5,6 +5,7 @@ import { useOrganization } from "@/lib/context/OrganizationContext";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { ActivityType } from "@/lib/types/database";
+import { convertToCSV } from "@/lib/utils/csv";
 
 interface Activity {
     id: string;
@@ -50,12 +51,26 @@ export default function ActivityPage() {
 
         const activitiesWithEmails = data.map((activity) => ({
             ...activity,
-            user_email: activity.user_id === user?.id ? user.email! : `user-${activity.user_id?.substring(0, 8) || "system"}@email.com`,
+            user_email: activity.user_id === user?.id ? (user?.email || "Unknown") : `user-${activity.user_id?.substring(0, 8) || "system"}@email.com`,
         }));
 
         setActivities(activitiesWithEmails);
         setLoading(false);
     }
+
+    const handleExport = () => {
+        if (activities.length === 0) return;
+
+        const exportData = activities.map(activity => ({
+            Date: new Date(activity.created_at).toLocaleString(),
+            User: activity.user_email,
+            Action: activity.action,
+            Details: getActionText(activity),
+            Metadata: JSON.stringify(activity.metadata)
+        }));
+
+        convertToCSV(exportData, `activity-log-${new Date().toISOString().split('T')[0]}.csv`);
+    };
 
     const getActionIcon = (action: ActivityType) => {
         switch (action) {
@@ -163,6 +178,19 @@ export default function ActivityPage() {
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Activity Log</h1>
                 <p className="text-gray-600 mt-2">View all recent activity in your organization</p>
+            </div>
+
+            <div className="flex justify-end mb-6">
+                <button
+                    onClick={handleExport}
+                    disabled={loading || activities.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Export CSV
+                </button>
             </div>
 
             {/* Activity Feed */}

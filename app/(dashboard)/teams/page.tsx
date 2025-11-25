@@ -165,7 +165,7 @@ export default function TeamsPage() {
                     {teams.map((team) => (
                         <div
                             key={team.id}
-                            onClick={() => router.push(`/dashboard/teams/${team.id}`)}
+                            onClick={() => router.push(`/teams/${team.id}`)}
                             className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all cursor-pointer group"
                         >
                             <div className="flex items-start justify-between mb-4">
@@ -224,7 +224,7 @@ export default function TeamsPage() {
                                     value={teamName}
                                     onChange={(e) => setTeamName(e.target.value)}
                                     placeholder="Engineering Team"
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                                 />
                             </div>
 
@@ -235,7 +235,7 @@ export default function TeamsPage() {
                                     onChange={(e) => setTeamDescription(e.target.value)}
                                     placeholder="What does this team do?"
                                     rows={3}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                                 />
                             </div>
 

@@ -62,7 +62,7 @@ export default function TeamDetailPage() {
 
         if (teamError || !teamData) {
             toast.error("Team not found");
-            router.push("/dashboard/teams");
+            router.push("/teams");
             return;
         }
 
@@ -79,21 +79,21 @@ export default function TeamDetailPage() {
         if (!memberError) {
             const membersWithEmails = memberData.map((m) => ({
                 ...m,
-                user_email: m.user_id === user?.id ? user.email! : `user-${m.user_id.substring(0, 8)}@email.com`,
+                user_email: (user && m.user_id === user.id) ? (user.email || "") : `user-${m.user_id.substring(0, 8)}@email.com`,
             }));
             setMembers(membersWithEmails);
         }
 
         // Load organization members for adding
         const { data: orgMemberData } = await supabase
-            .from("organization_members")
-            .select("user_id")
-            .eq("organization_id", organization.id);
+            .rpc('get_organization_members_with_email', {
+                org_id: organization.id
+            });
 
         if (orgMemberData) {
-            const orgMembersWithEmails = orgMemberData.map((m) => ({
-                user_id: m.user_id,
-                user_email: m.user_id === user?.id ? user.email! : `user-${m.user_id.substring(0, 8)}@email.com`,
+            const orgMembersWithEmails = orgMemberData.map((m: any) => ({
+                user_id: m.member_user_id,
+                user_email: m.member_email,
             }));
             setOrgMembers(orgMembersWithEmails);
         }
@@ -230,7 +230,7 @@ export default function TeamDetailPage() {
             });
 
             toast.success("Team deleted successfully");
-            router.push("/dashboard/teams");
+            router.push("/teams");
         } catch (error: any) {
             toast.error(error.message || "Failed to delete team");
         }
@@ -259,7 +259,7 @@ export default function TeamDetailPage() {
             <div className="flex items-start justify-between mb-8">
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => router.push("/dashboard/teams")}
+                        onClick={() => router.push("/teams")}
                         className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50"
                     >
                         <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -372,7 +372,7 @@ export default function TeamDetailPage() {
                                 <select
                                     value={selectedMember}
                                     onChange={(e) => setSelectedMember(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                                 >
                                     <option value="">Choose a member...</option>
                                     {availableMembers.map((member) => (
@@ -426,7 +426,7 @@ export default function TeamDetailPage() {
                                     type="text"
                                     value={editName}
                                     onChange={(e) => setEditName(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                                 />
                             </div>
 
@@ -436,7 +436,7 @@ export default function TeamDetailPage() {
                                     value={editDescription}
                                     onChange={(e) => setEditDescription(e.target.value)}
                                     rows={3}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                                 />
                             </div>
 
