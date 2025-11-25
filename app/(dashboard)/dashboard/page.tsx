@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useOrganization } from "@/lib/context/OrganizationContext";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 
 interface Stats {
     totalTeams: number;
@@ -128,7 +129,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {(userRole === "admin" || userRole === "owner") && (
                         <>
-                            <a
+                            <Link
                                 href="/teams"
                                 className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all group"
                             >
@@ -141,9 +142,9 @@ export default function DashboardPage() {
                                     <p className="font-medium text-gray-900">Create Team</p>
                                     <p className="text-sm text-gray-600">Add a new team</p>
                                 </div>
-                            </a>
+                            </Link>
 
-                            <a
+                            <Link
                                 href="/members"
                                 className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all group"
                             >
@@ -156,11 +157,11 @@ export default function DashboardPage() {
                                     <p className="font-medium text-gray-900">Invite Member</p>
                                     <p className="text-sm text-gray-600">Add team members</p>
                                 </div>
-                            </a>
+                            </Link>
                         </>
                     )}
 
-                    <a
+                    <Link
                         href="/teams"
                         className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all group"
                     >
@@ -174,7 +175,7 @@ export default function DashboardPage() {
                             <p className="font-medium text-gray-900">View Teams</p>
                             <p className="text-sm text-gray-600">Browse all teams</p>
                         </div>
-                    </a>
+                    </Link>
                 </div>
             </div>
         </div>
