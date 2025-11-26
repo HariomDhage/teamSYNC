@@ -158,7 +158,7 @@ export default function WebhooksPage() {
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                            We'll send a POST request with a JSON payload for events.
+                            We&apos;ll send a POST request with a JSON payload for events.
                         </p>
                     </div>
 
@@ -179,7 +179,7 @@ export default function WebhooksPage() {
                                         }}
                                         className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                                     />
-                                    <span className="text-sm text-gray-700 font-mono">{event}</span>
+                                    <span className="text-sm text-gray-700 capitalize">{event.replace(/_/g, ' ')}</span>
                                 </label>
                             ))}
                             <label className="flex items-center gap-2 cursor-pointer">

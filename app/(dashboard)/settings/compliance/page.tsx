@@ -134,7 +134,7 @@ export default function CompliancePage() {
                     <div>
                         <h2 className="text-lg font-semibold text-gray-900 mb-2">SOC2 Readiness Report</h2>
                         <p className="text-gray-600 text-sm max-w-xl">
-                            Generate a comprehensive report detailing your organization's security posture,
+                            Generate a comprehensive report detailing your organization&apos;s security posture,
                             access controls, and activity logging configuration. This report is suitable for
                             internal audits and compliance reviews.
                         </p>
