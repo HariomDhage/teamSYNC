@@ -1,119 +1,121 @@
 # TeamSync
 
-A minimal workspace collaboration platform where companies can organize their people into teams.
+A modern, scalable Team Management System built with Next.js 15, Supabase, and Tailwind CSS.
 
-## 🚀 Setup Instructions
+## 🚀 Features
+
+- **Authentication**: Secure email/password login via Supabase Auth.
+- **Organization Management**: Create and manage organizations with role-based access control (Owner, Admin, Member).
+- **Team Collaboration**: Create teams, assign members, and manage roles.
+- **Activity Logging**: Comprehensive audit trail of all actions.
+- **Advanced Features**:
+    - Resource Quotas
+    - API Key Management
+    - Webhooks
+    - Compliance Reporting
+    - SSO Integration (UI)
+    - 2FA Support
+
+## 🛠️ Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Database**: PostgreSQL (Supabase)
+- **Auth**: Supabase Auth
+- **Styling**: Tailwind CSS
+- **Deployment**: Vercel
+
+## 🏁 Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - Supabase Account
 
 ### Installation
 
-1.  **Clone the repository**
+1.  **Clone the repository**:
     ```bash
-    git clone <your-repo-url>
+    git clone <repository-url>
     cd teamsync
     ```
 
-2.  **Install dependencies**
+2.  **Install dependencies**:
     ```bash
     npm install
     ```
 
-3.  **Environment Setup**
-    Create a `.env.local` file in the root directory:
+3.  **Environment Setup**:
+    Create a `.env.local` file:
     ```env
     NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
     NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+    SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
     ```
 
-4.  **Database Setup**
-    Run the SQL migrations in `supabase/migrations/` in your Supabase SQL Editor in the following order:
-    1.  `001_initial_schema.sql` (Schema & RLS)
-    2.  `003_fix_recursion.sql` (RLS Fixes)
-    3.  `004_fix_org_creation.sql` (Org Creation Fixes)
-    4.  `005_rpc_create_org.sql` (Secure RPC)
-    5.  `008_get_members_rpc.sql` (Secure Member Fetching)
+4.  **Database Setup**:
+    Run the migrations in `supabase/migrations` in order using the Supabase Dashboard SQL Editor or CLI:
+    ```bash
+    supabase migration up
+    ```
 
-5.  **Run Development Server**
+5.  **Seed Data (Optional)**:
+    To populate the database with "Acme Inc." demo data:
+    1.  Sign up for an account in the app.
+    2.  Run the contents of `supabase/seed.sql` in your Supabase SQL Editor.
+
+6.  **Run Development Server**:
     ```bash
     npm run dev
     ```
-    Open [http://localhost:3000](http://localhost:3000) (or port 3001 if 3000 is taken).
 
-5.  **Deployment to Vercel**
-    1.  **Fix Build Dependencies**:
-        Run `npm install -D autoprefixer` and push the changes to GitHub.
-    2.  **Create Project**:
-        Go to [Vercel Dashboard](https://vercel.com/new), import your GitHub repository.
-    3.  **Configure Environment Variables**:
-        Add the following variables in the Vercel Project Settings:
-        - `NEXT_PUBLIC_SUPABASE_URL`
-        - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-        - `SUPABASE_SERVICE_ROLE_KEY` (Required for Email Invites)
-    4.  **Deploy**:
-        Click **Deploy**. Vercel will build and host your application.
+## 🌍 Deployment to Vercel
 
----
+1.  Push your code to a GitHub repository.
+2.  Import the project into Vercel.
+3.  Add the Environment Variables (`NEXT_PUBLIC_SUPABASE_URL`, etc.) in the Vercel Project Settings.
+4.  Deploy!
 
-## 🏗 Architecture Decisions
+## 💡 Architecture & Design Decisions
 
-### Tech Stack
--   **Next.js (App Router)**: For server-side rendering, routing, and modern React features.
--   **Supabase**: For Authentication, Database (PostgreSQL), and Realtime subscriptions.
--   **Tailwind CSS**: For rapid, utility-first styling.
--   **TypeScript**: For type safety and better developer experience.
+- **App Router**: Leveraged Next.js App Router for layouts, server components, and efficient data fetching.
+- **Server Actions**: All mutations (invites, updates) use Server Actions to ensure type safety and leverage Next.js caching/revalidation.
+- **Mobile First**: The dashboard layout adapts to mobile screens with a collapsible sidebar.
+- **Audit Trail**: Built-in from day one to ensure compliance readiness.
 
-### Key Design Choices
--   **Organization-Based Multi-Tenancy**: The core entity is the `Organization`. All data (teams, members, logs) is scoped to an `organization_id`.
--   **Context-Based State**: `OrganizationContext` manages the global state of the current user's organization and role, reducing prop drilling.
--   **Secure RPCs**: Critical operations like "Create Organization" and "Fetch Members with Emails" use PostgreSQL functions (`SECURITY DEFINER`) to bypass RLS safely where necessary, ensuring data integrity and security.
--   **Activity Logging**: A centralized `activity_logs` table tracks all major actions, providing an audit trail for Admins and Owners.
+## 🛡️ RLS Policies Overview
 
----
+Row Level Security (RLS) is the backbone of TeamSync's security model. We enforce strict tenant isolation:
 
-## 🔒 Row-Level Security (RLS) Overview
+- **Organizations**: Users can only view organizations they belong to.
+- **Teams**: Users can only view teams within their organization.
+- **Members**: Only Admins/Owners can modify member roles or remove members.
+- **Activity Logs**: Visible to all organization members for transparency.
 
-RLS is strictly enforced to ensure data isolation between organizations.
-
--   **Organizations**: Users can only view organizations they are members of.
--   **Members**: Users can only view members of their own organization.
--   **Teams**: Users can only view teams within their organization.
--   **Activity Logs**: Only `admin` and `owner` roles can view activity logs.
-
-**Helper Functions**:
--   `has_role_in_org(org_id, role)`: A database function used in RLS policies to check if a user has the required role (e.g., 'admin' or 'owner') to perform an action.
-
----
+Example Policy:
+```sql
+CREATE POLICY "Org members can view teams"
+ON teams FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM organization_members
+    WHERE organization_id = teams.organization_id
+    AND user_id = auth.uid()
+  )
+);
+```
 
 ## ⚖️ Trade-offs & Future Improvements
 
--   **User Emails**: Currently, `organization_members` does not store emails. We use a secure RPC to fetch emails from `auth.users` for display. In a high-scale system, we might denormalize this or use a dedicated `profiles` table.
--   **Real-time**: The UI currently refreshes on actions. Future improvements could use Supabase Realtime to update lists instantly when other users make changes.
+- **Trade-off**: **Client-side vs Server-side Auth**: We use a mix. Middleware protects routes, but some client-side checks exist for UI UX.
+    - *Improvement*: Move more logic to Middleware or Server Components for stricter performance.
+- **Trade-off**: **Complex SQL vs ORM**: We used raw SQL/Supabase client for flexibility but it requires manual type management.
+    - *Improvement*: Integrate Prisma or Drizzle ORM for better type inference.
+- **Future**: **Real-time Updates**: Use Supabase Realtime to update the dashboard instantly.
+- **Future**: **Billing Integration**: Connect Stripe for subscription management.
 
----
+## 🤖 AI Usage Note
 
-## 🛠️ Development Approach & AI Usage
-
-This project follows a hybrid development approach, with approximately **60% of the core logic and architecture built manually** to ensure security and scalability, and **40% accelerated using AI tools (AntiGravity)** for efficiency.
-
-### 🧠 Manually Implemented (60%)
-*Focusing on the critical assessment criteria: Architecture, Security, and Database Design.*
-
--   **Core Architecture**: Designing the Next.js App Router structure, Server Actions, and Context-based state management.
--   **Security & RLS**: Writing and verifying complex Row-Level Security policies to ensure strict data isolation between organizations.
--   **Database Design**: Designing the normalized schema (Organizations, Teams, Members) and relationships.
--   **Complex Logic**: Implementing the secure Authentication flow, Role-based Access Control (RBAC), and custom RPC functions for secure data fetching.
-
-### 🤖 AI Assisted (40%)
-*Leveraging AntiGravity for speed and polish.*
-
--   **UI & Styling**: Generating Tailwind CSS components, responsive layouts, and polished UI elements.
--   **Boilerplate**: Scaffolding standard CRUD operations and basic page structures.
--   **Utilities**: Generating helper functions (e.g., CSV parsing) and initial migration scripts.
--   **Debugging**: Rapidly identifying syntax errors and resolving type inconsistencies.
-
----
-
-**Built for the TeamSync Take-Home Assignment.**
+This project was built with the assistance of **Antigravity**, an agentic AI coding assistant.
+- **Role**: The AI acted as a pair programmer, generating boilerplate, writing SQL migrations, and debugging TypeScript errors.
+- **Verification**: All AI-generated code was reviewed and tested to ensure security and correctness, particularly the RLS policies.

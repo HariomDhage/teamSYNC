@@ -24,6 +24,8 @@ export interface Organization {
     name: string;
     created_at: string;
     updated_at: string;
+    max_teams: number;
+    max_members: number;
 }
 
 export interface OrganizationMember {

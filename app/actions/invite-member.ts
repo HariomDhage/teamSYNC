@@ -32,7 +32,30 @@ export async function inviteMember(formData: FormData) {
             return { error: "You do not have permission to invite members" };
         }
 
-        // 2. Invite user via Supabase Auth (sends email)
+        // 2. Check Member Quota
+        const { count: memberCount, error: countError } = await supabase
+            .from("organization_members")
+            .select("*", { count: "exact", head: true })
+            .eq("organization_id", organizationId);
+
+        const { data: orgData, error: orgError } = await supabase
+            .from("organizations")
+            .select("max_members")
+            .eq("id", organizationId)
+            .single();
+
+        if (countError || orgError || !orgData) {
+            console.error("Error checking quota:", countError || orgError);
+            // Fail safe: proceed if we can't check, or throw? 
+            // Better to throw to avoid overage if DB is acting up.
+            return { error: "Failed to verify organization limits" };
+        }
+
+        if ((memberCount || 0) >= orgData.max_members) {
+            return { error: `Organization limit reached (${orgData.max_members} members). Upgrade your plan to invite more members.` };
+        }
+
+        // 3. Invite user via Supabase Auth (sends email)
         const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email);
 
         if (inviteError) {
@@ -85,6 +108,17 @@ export async function inviteMember(formData: FormData) {
             user_id: user.id,
             action: "user_invited",
             metadata: { email, role },
+        });
+
+        // 5. Dispatch Webhook
+        // We import dynamically or use the utility we just created
+        const { dispatchWebhook } = await import("@/lib/webhooks");
+        // Don't await this to keep UI fast
+        dispatchWebhook(organizationId, "user_invited", {
+            email,
+            role,
+            invited_by: user.id,
+            invited_at: new Date().toISOString()
         });
 
         revalidatePath("/members");

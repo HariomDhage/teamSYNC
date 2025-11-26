@@ -12,11 +12,18 @@ interface Member {
     role: MemberRole;
     invited_at: string;
     user_email: string;
+    custom_role_id?: string;
+}
+
+interface CustomRole {
+    id: string;
+    name: string;
 }
 
 export default function MembersPage() {
     const { organization, userRole, user } = useOrganization();
     const [members, setMembers] = useState<Member[]>([]);
+    const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [email, setEmail] = useState("");
@@ -30,7 +37,18 @@ export default function MembersPage() {
 
     useEffect(() => {
         loadMembers();
+        loadCustomRoles();
     }, [organization]);
+
+    async function loadCustomRoles() {
+        if (!organization) return;
+        const supabase = createClient();
+        const { data } = await supabase
+            .from("organization_roles")
+            .select("id, name")
+            .eq("organization_id", organization.id);
+        if (data) setCustomRoles(data);
+    }
 
     async function loadMembers() {
         if (!organization) return;
@@ -50,6 +68,7 @@ export default function MembersPage() {
                 id: member.member_id,
                 user_id: member.member_user_id,
                 role: member.member_role,
+                custom_role_id: member.custom_role_id,
                 invited_at: member.member_created_at,
                 user_email: member.member_email,
             }));
@@ -122,6 +141,9 @@ export default function MembersPage() {
                 let failCount = 0;
                 const supabase = createClient();
 
+                // Import the action dynamically
+                const { inviteMember } = await import("@/app/actions/invite-member");
+
                 for (let i = 1; i < lines.length; i++) {
                     const line = lines[i].trim();
                     if (!line) continue;
@@ -130,6 +152,8 @@ export default function MembersPage() {
                     const email = columns[emailIndex];
                     // Clean role and validate
                     let role = roleIndex !== -1 ? columns[roleIndex].toLowerCase() : 'member';
+                    // Allow custom roles if they match by name, otherwise default to member
+                    // For now, we only support standard roles in CSV for simplicity, or we'd need to lookup custom role IDs
                     if (!['owner', 'admin', 'member'].includes(role)) role = 'member';
 
                     if (!email) continue;
@@ -137,14 +161,19 @@ export default function MembersPage() {
                     setImportProgress(`Importing ${i}/${lines.length - 1}: ${email}`);
 
                     try {
-                        // Log the invitation
-                        await supabase.from("activity_logs").insert({
-                            organization_id: organization.id,
-                            user_id: user.id,
-                            action: "user_invited",
-                            metadata: { email, role },
-                        });
-                        successCount++;
+                        const formData = new FormData();
+                        formData.append("email", email);
+                        formData.append("role", role);
+                        formData.append("organizationId", organization.id);
+
+                        const result = await inviteMember(formData);
+
+                        if (result.error) {
+                            console.error(`Failed to invite ${email}: ${result.error}`);
+                            failCount++;
+                        } else {
+                            successCount++;
+                        }
                     } catch (err) {
                         console.error(`Failed to invite ${email}`, err);
                         failCount++;
@@ -165,7 +194,7 @@ export default function MembersPage() {
         reader.readAsText(file);
     }
 
-    async function handleRoleChange(memberId: string, newRole: MemberRole) {
+    async function handleRoleChange(memberId: string, newRole: MemberRole, customRoleId: string | null = null) {
         if (!organization || !user) return;
 
         try {
@@ -173,7 +202,10 @@ export default function MembersPage() {
 
             const { error } = await supabase
                 .from("organization_members")
-                .update({ role: newRole })
+                .update({
+                    role: newRole,
+                    custom_role_id: customRoleId
+                })
                 .eq("id", memberId);
 
             if (error) throw error;
@@ -183,7 +215,11 @@ export default function MembersPage() {
                 organization_id: organization.id,
                 user_id: user.id,
                 action: "role_changed",
-                metadata: { member_id: memberId, new_role: newRole },
+                metadata: {
+                    member_id: memberId,
+                    new_role: newRole,
+                    custom_role_id: customRoleId
+                },
             });
 
             toast.success("Role updated successfully");
@@ -308,17 +344,37 @@ export default function MembersPage() {
                                         <td className="px-6 py-4">
                                             {canManage && member.user_id !== user?.id ? (
                                                 <select
-                                                    value={member.role}
-                                                    onChange={(e) => handleRoleChange(member.id, e.target.value as MemberRole)}
-                                                    className={`px-3 py-1.5 text-sm font-medium rounded border ${getRoleBadge(member.role)} cursor-pointer`}
+                                                    value={member.role === 'member' && member.custom_role_id ? member.custom_role_id : member.role}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (['admin', 'member', 'owner'].includes(val)) {
+                                                            handleRoleChange(member.id, val as MemberRole, null);
+                                                        } else {
+                                                            handleRoleChange(member.id, 'member', val);
+                                                        }
+                                                    }}
+                                                    className={`px-3 py-1.5 text-sm font-medium rounded border cursor-pointer ${member.role === 'owner' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                                                        member.role === 'admin' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                            'bg-gray-100 text-gray-700 border-gray-200'
+                                                        }`}
                                                 >
                                                     <option value="member">Member</option>
                                                     <option value="admin">Admin</option>
                                                     {userRole === "owner" && <option value="owner">Owner</option>}
+                                                    {customRoles.length > 0 && <optgroup label="Custom Roles">
+                                                        {customRoles.map(r => (
+                                                            <option key={r.id} value={r.id}>{r.name}</option>
+                                                        ))}
+                                                    </optgroup>}
                                                 </select>
                                             ) : (
-                                                <span className={`inline-block px-3 py-1 text-sm font-medium rounded border ${getRoleBadge(member.role)}`}>
-                                                    {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                                                <span className={`inline-block px-3 py-1 text-sm font-medium rounded border ${member.role === 'owner' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                                                    member.role === 'admin' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                        'bg-gray-100 text-gray-700 border-gray-200'
+                                                    }`}>
+                                                    {member.role === 'member' && member.custom_role_id
+                                                        ? customRoles.find(r => r.id === member.custom_role_id)?.name || 'Custom Role'
+                                                        : member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                                                 </span>
                                             )}
                                         </td>

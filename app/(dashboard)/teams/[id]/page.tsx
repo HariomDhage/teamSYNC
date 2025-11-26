@@ -18,6 +18,7 @@ interface TeamMemberData {
     user_id: string;
     added_at: string;
     user_email: string;
+    role?: string;
 }
 
 interface OrgMember {
@@ -70,6 +71,27 @@ export default function TeamDetailPage() {
         setEditName(teamData.name);
         setEditDescription(teamData.description || "");
 
+        // Load organization members (with roles and emails)
+        const { data: orgMemberData } = await supabase
+            .rpc('get_organization_members_with_email', {
+                org_id: organization.id
+            });
+
+        let orgMembersMap = new Map();
+        if (orgMemberData) {
+            const orgMembersWithEmails = orgMemberData.map((m: any) => ({
+                user_id: m.member_user_id,
+                user_email: m.member_email,
+                role: m.member_role
+            }));
+            setOrgMembers(orgMembersWithEmails);
+
+            // Create a map for easy lookup
+            orgMembersWithEmails.forEach((m: any) => {
+                orgMembersMap.set(m.user_id, m);
+            });
+        }
+
         // Load team members
         const { data: memberData, error: memberError } = await supabase
             .from("team_members")
@@ -77,25 +99,15 @@ export default function TeamDetailPage() {
             .eq("team_id", teamId);
 
         if (!memberError) {
-            const membersWithEmails = memberData.map((m) => ({
-                ...m,
-                user_email: (user && m.user_id === user.id) ? (user.email || "") : `user-${m.user_id.substring(0, 8)}@email.com`,
-            }));
-            setMembers(membersWithEmails);
-        }
-
-        // Load organization members for adding
-        const { data: orgMemberData } = await supabase
-            .rpc('get_organization_members_with_email', {
-                org_id: organization.id
+            const membersWithDetails = memberData.map((m) => {
+                const orgMember = orgMembersMap.get(m.user_id);
+                return {
+                    ...m,
+                    user_email: orgMember?.user_email || (user && m.user_id === user.id ? user.email : "Unknown"),
+                    role: orgMember?.role || "member"
+                };
             });
-
-        if (orgMemberData) {
-            const orgMembersWithEmails = orgMemberData.map((m: any) => ({
-                user_id: m.member_user_id,
-                user_email: m.member_email,
-            }));
-            setOrgMembers(orgMembersWithEmails);
+            setMembers(membersWithDetails);
         }
 
         setLoading(false);
@@ -329,7 +341,15 @@ export default function TeamDetailPage() {
                                         {member.user_email[0].toUpperCase()}
                                     </div>
                                     <div>
-                                        <p className="font-medium text-gray-900">{member.user_email}</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-medium text-gray-900">{member.user_email}</p>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full border ${member.role === 'owner' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                                                member.role === 'admin' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                    'bg-gray-100 text-gray-700 border-gray-200'
+                                                }`}>
+                                                {member.role ? member.role.charAt(0).toUpperCase() + member.role.slice(1) : 'Member'}
+                                            </span>
+                                        </div>
                                         <p className="text-sm text-gray-500">
                                             Added {new Date(member.added_at).toLocaleDateString()}
                                         </p>

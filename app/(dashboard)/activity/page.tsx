@@ -20,29 +20,38 @@ export default function ActivityPage() {
     const router = useRouter();
     const [activities, setActivities] = useState<Activity[]>([]);
     const [loading, setLoading] = useState(true);
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
 
-    // Redirect if not admin or owner
-    useEffect(() => {
-        if (userRole && userRole !== "admin" && userRole !== "owner") {
-            router.push("/dashboard");
-        }
-    }, [userRole, router]);
+    // Access allowed for all members
 
     useEffect(() => {
         loadActivities();
-    }, [organization]);
+    }, [organization, startDate, endDate]);
 
     async function loadActivities() {
         if (!organization) return;
 
         const supabase = createClient();
 
-        const { data, error } = await supabase
+        let query = supabase
             .from("activity_logs")
             .select("*")
             .eq("organization_id", organization.id)
             .order("created_at", { ascending: false })
             .limit(100);
+
+        if (startDate) {
+            query = query.gte("created_at", new Date(startDate).toISOString());
+        }
+        if (endDate) {
+            // Set end date to end of day
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            query = query.lte("created_at", end.toISOString());
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error(error);
@@ -58,7 +67,7 @@ export default function ActivityPage() {
         setLoading(false);
     }
 
-    const handleExport = () => {
+    const handleExportCSV = () => {
         if (activities.length === 0) return;
 
         const exportData = activities.map(activity => ({
@@ -70,6 +79,28 @@ export default function ActivityPage() {
         }));
 
         convertToCSV(exportData, `activity-log-${new Date().toISOString().split('T')[0]}.csv`);
+    };
+
+    const handleExportJSON = () => {
+        if (activities.length === 0) return;
+
+        const exportData = activities.map(activity => ({
+            id: activity.id,
+            date: activity.created_at,
+            user: activity.user_email,
+            action: activity.action,
+            details: getActionText(activity),
+            metadata: activity.metadata
+        }));
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `activity-log-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const getActionIcon = (action: ActivityType) => {
@@ -168,9 +199,7 @@ export default function ActivityPage() {
         }
     };
 
-    if (userRole !== "admin" && userRole !== "owner") {
-        return null;
-    }
+    // Render for all users
 
     return (
         <div className="p-8">
@@ -180,17 +209,58 @@ export default function ActivityPage() {
                 <p className="text-gray-600 mt-2">View all recent activity in your organization</p>
             </div>
 
-            <div className="flex justify-end mb-6">
-                <button
-                    onClick={handleExport}
-                    disabled={loading || activities.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Export CSV
-                </button>
+            <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center gap-4 mb-6">
+                <div className="flex gap-4 items-center">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    </div>
+                    {(startDate || endDate) && (
+                        <button
+                            onClick={() => { setStartDate(""); setEndDate(""); }}
+                            className="mt-6 text-sm text-gray-500 hover:text-gray-700 underline"
+                        >
+                            Clear
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleExportCSV}
+                        disabled={loading || activities.length === 0}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Export CSV
+                    </button>
+                    <button
+                        onClick={handleExportJSON}
+                        disabled={loading || activities.length === 0}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Export JSON
+                    </button>
+                </div>
             </div>
 
             {/* Activity Feed */}

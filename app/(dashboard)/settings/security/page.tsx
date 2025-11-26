@@ -1,187 +1,140 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { getSessions, type Session } from "@/app/actions/get-sessions";
+import { revokeSession, signOutEverywhere } from "@/app/actions/revoke-session";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SecurityPage() {
-    const [loading, setLoading] = useState(false);
-    const [session, setSession] = useState<any>(null);
     const router = useRouter();
-    const supabase = createClient();
+    const [sessions, setSessions] = useState<Session[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [revokingId, setRevokingId] = useState<string | null>(null);
+    const [signingOutAll, setSigningOutAll] = useState(false);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data }) => {
-            setSession(data.session);
-        });
+        loadSessions();
     }, []);
 
-    const handleSignOutEverywhere = async () => {
-        if (!confirm("Are you sure you want to sign out from all devices? You will be redirected to login.")) return;
+    async function loadSessions() {
+        const result = await getSessions();
+        if (result.error) {
+            toast.error(result.error);
+        } else if (result.sessions) {
+            setSessions(result.sessions);
+        }
+        setLoading(false);
+    }
 
-        setLoading(true);
-        try {
-            const { error } = await supabase.auth.signOut({ scope: 'global' });
-            if (error) throw error;
+    async function handleRevokeSession(sessionId: string) {
+        if (!confirm("Are you sure you want to sign out this session?")) return;
+        setRevokingId(sessionId);
 
-            toast.success("Signed out from all devices");
+        const result = await revokeSession(sessionId);
+
+        if (result.success) {
+            toast.success("Session revoked");
+            setSessions(sessions.filter(s => s.id !== sessionId));
+        } else {
+            toast.error(result.error || "Failed to revoke session");
+        }
+        setRevokingId(null);
+    }
+
+    async function handleSignOutEverywhere() {
+        if (!confirm("Are you sure you want to sign out of all devices? You will be redirected to login.")) return;
+        setSigningOutAll(true);
+
+        const result = await signOutEverywhere();
+
+        if (result.success) {
+            toast.success("Signed out everywhere");
+            const supabase = createClient();
+            await supabase.auth.signOut();
             router.push("/login");
-        } catch (error: any) {
-            toast.error(error.message || "Failed to sign out everywhere");
-            setLoading(false);
+        } else {
+            toast.error(result.error || "Failed to sign out everywhere");
+            setSigningOutAll(false);
         }
-    };
-
-    const [enrolling, setEnrolling] = useState(false);
-    const [qrCode, setQrCode] = useState<string | null>(null);
-    const [factorId, setFactorId] = useState<string | null>(null);
-    const [verifyCode, setVerifyCode] = useState("");
-    const [verifying, setVerifying] = useState(false);
-
-    const handleEnrollMFA = async () => {
-        setEnrolling(true);
-        try {
-            const { data, error } = await supabase.auth.mfa.enroll({
-                factorType: 'totp'
-            });
-
-            if (error) throw error;
-
-            setFactorId(data.id);
-            setQrCode(data.totp.qr_code);
-        } catch (error: any) {
-            toast.error(error.message || "Failed to start enrollment");
-            setEnrolling(false);
-        }
-    };
-
-    const handleVerifyMFA = async () => {
-        if (!factorId || !verifyCode) return;
-        setVerifying(true);
-
-        try {
-            const challenge = await supabase.auth.mfa.challenge({ factorId });
-            if (challenge.error) throw challenge.error;
-
-            const verify = await supabase.auth.mfa.verify({
-                factorId,
-                challengeId: challenge.data.id,
-                code: verifyCode
-            });
-
-            if (verify.error) throw verify.error;
-
-            toast.success("2FA enabled successfully");
-            setQrCode(null);
-            setFactorId(null);
-            setEnrolling(false);
-            setVerifyCode("");
-        } catch (error: any) {
-            toast.error(error.message || "Invalid code");
-        } finally {
-            setVerifying(false);
-        }
-    };
-
-    const handleCancelMFA = async () => {
-        if (factorId) {
-            await supabase.auth.mfa.unenroll({ factorId });
-        }
-        setQrCode(null);
-        setFactorId(null);
-        setEnrolling(false);
-    };
+    }
 
     return (
-        <div className="p-8 max-w-2xl">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Security Settings</h1>
-                <p className="text-gray-600 mt-2">Manage your account security and sessions</p>
+        <div className="p-8 max-w-4xl">
+            <div className="mb-8 flex items-center gap-4">
+                <button
+                    onClick={() => router.back()}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                    <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                </button>
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">Security</h1>
+                    <p className="text-gray-600 mt-2">Manage your active sessions and devices</p>
+                </div>
             </div>
 
-            <div className="space-y-6">
-                {/* 2FA Section */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Two-Factor Authentication</h2>
-
-                    {!qrCode ? (
-                        <div>
-                            <p className="text-gray-600 mb-4">
-                                Add an extra layer of security to your account by enabling 2FA.
-                            </p>
-                            <button
-                                onClick={handleEnrollMFA}
-                                disabled={enrolling}
-                                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50"
-                            >
-                                {enrolling ? "Preparing..." : "Enable 2FA"}
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
-                                <p className="text-sm font-medium text-gray-900 mb-2">Scan this QR code with your authenticator app</p>
-                                <img src={qrCode} alt="QR Code" className="mx-auto w-48 h-48" />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Enter verification code</label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={verifyCode}
-                                        onChange={(e) => setVerifyCode(e.target.value)}
-                                        placeholder="000000"
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                    <button
-                                        onClick={handleVerifyMFA}
-                                        disabled={verifying || !verifyCode}
-                                        className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-all disabled:opacity-50"
-                                    >
-                                        {verifying ? "Verifying..." : "Verify"}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleCancelMFA}
-                                className="text-sm text-gray-500 hover:text-gray-700 underline"
-                            >
-                                Cancel setup
-                            </button>
-                        </div>
-                    )}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-lg font-semibold">Active Sessions</h2>
+                    <button
+                        onClick={handleSignOutEverywhere}
+                        disabled={signingOutAll}
+                        className="text-red-600 hover:text-red-800 text-sm font-medium border border-red-200 hover:bg-red-50 px-4 py-2 rounded-lg transition-all"
+                    >
+                        {signingOutAll ? "Signing out..." : "Sign out everywhere"}
+                    </button>
                 </div>
 
-                {/* Session Management */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Session Management</h2>
-
+                {loading ? (
+                    <div className="text-center py-8 text-gray-500">Loading sessions...</div>
+                ) : sessions.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">No active sessions found.</div>
+                ) : (
                     <div className="space-y-4">
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <h3 className="font-medium text-blue-900 mb-1">Current Session</h3>
-                            <p className="text-sm text-blue-700">
-                                Active since: {session?.user?.last_sign_in_at ? new Date(session.user.last_sign_in_at).toLocaleString() : 'Unknown'}
-                            </p>
-                        </div>
-
-                        <div className="pt-4 border-t border-gray-100">
-                            <h3 className="font-medium text-gray-900 mb-2">Sign Out Everywhere</h3>
-                            <p className="text-sm text-gray-600 mb-4">
-                                This will revoke all active sessions across all devices, including this one. You will need to log in again.
-                            </p>
-                            <button
-                                onClick={handleSignOutEverywhere}
-                                disabled={loading}
-                                className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-all disabled:opacity-50"
-                            >
-                                {loading ? "Signing out..." : "Sign Out from All Devices"}
-                            </button>
-                        </div>
+                        {sessions.map(session => (
+                            <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${session.is_current ? 'bg-green-100 text-green-600' : 'bg-gray-200 text-gray-500'}`}>
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-gray-900">
+                                                {session.is_current ? "Current Session" : "Other Session"}
+                                            </span>
+                                            {session.is_current && (
+                                                <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                                                    Active Now
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-sm text-gray-500 mt-1">
+                                            Started {new Date(session.created_at).toLocaleString()}
+                                        </div>
+                                    </div>
+                                </div>
+                                {!session.is_current && (
+                                    <button
+                                        onClick={() => handleRevokeSession(session.id)}
+                                        disabled={revokingId === session.id}
+                                        className="text-gray-500 hover:text-red-600 p-2 rounded-full hover:bg-gray-200 transition-colors"
+                                        title="Revoke session"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        ))}
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );

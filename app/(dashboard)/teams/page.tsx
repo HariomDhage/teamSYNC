@@ -5,6 +5,7 @@ import { useOrganization } from "@/lib/context/OrganizationContext";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { createTeam } from "@/app/actions/create-team";
 
 interface Team {
     id: string;
@@ -77,28 +78,11 @@ export default function TeamsPage() {
         setCreating(true);
 
         try {
-            const supabase = createClient();
+            const result = await createTeam(organization.id, teamName, teamDescription);
 
-            const { data, error } = await supabase
-                .from("teams")
-                .insert({
-                    organization_id: organization.id,
-                    name: teamName.trim(),
-                    description: teamDescription.trim() || null,
-                    created_by: user.id,
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            // Log the team creation
-            await supabase.from("activity_logs").insert({
-                organization_id: organization.id,
-                user_id: user.id,
-                action: "team_created",
-                metadata: { team_id: data.id, team_name: teamName.trim() },
-            });
+            if (!result.success) {
+                throw new Error(result.error);
+            }
 
             toast.success("Team created successfully");
             setShowCreateModal(false);
