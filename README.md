@@ -114,8 +114,3 @@ USING (
 - **Future**: **Real-time Updates**: Use Supabase Realtime to update the dashboard instantly.
 - **Future**: **Billing Integration**: Connect Stripe for subscription management.
 
-## 🤖 AI Usage Note
-
-This project was built with the assistance of **Antigravity**, an agentic AI coding assistant.
-- **Role**: The AI acted as a pair programmer, generating boilerplate, writing SQL migrations, and debugging TypeScript errors.
-- **Verification**: All AI-generated code was reviewed and tested to ensure security and correctness, particularly the RLS policies.
